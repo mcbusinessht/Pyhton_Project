@@ -206,18 +206,7 @@ class ReservationSalle:
             return cap_max < nbre_max_event
     
 
-    def get_available_salle(self, id_salle):
-        available_salle=[]
-        try:
-            with open(self.path_salle_csv,'r')as f:
-                reader_s=csv.reader(f)
-                next(reader_s,None)
-                for row in reader_s:
-                    available_salle.append(row)
-            
-
-        except FileNotFoundError:
-            print("Fichier Non trouver")
+  
 
     def suggest_alternative_salles(self, id_salle_conflictuelle: str, id_evenement: str):
         try:
