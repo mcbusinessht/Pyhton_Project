@@ -1,0 +1,6 @@
+Id,Nom,Capacite_Maximale,Equipements,Horaire
+892869,Salle d'acceuil,30,[],10:00-13:00
+153360,Auditorium,100,['Podium'],12:00-14:00
+884996,Bar,50,['guichet'],8:00-14:00
+358194,Resto,30,['Tables'],10:00-16:00
+595966,Salle-test,20,['Lampe-solaire'],10:00-16:00
