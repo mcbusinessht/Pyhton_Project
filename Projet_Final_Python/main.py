@@ -443,8 +443,7 @@ def run():
                     break
                 case _:
                     print("Erreur, Saisie Invalid !")
-            if c_two==5: 
-                continue
+            
             
         
 if __name__=="__main__":    
