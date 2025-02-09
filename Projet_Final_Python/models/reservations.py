@@ -78,36 +78,38 @@ class ReservationSalle:
         
         #Verifie que la Capaciter maximale de la salle est >= au nombre de personne prevu dans l'evenement
         if self.is_cap_max_salle_conflict(reservation.id_salle, reservation.id_evenement)==True:
-            print(f"Conflit detecte ! La salle {reservation.id_salle} est deja attribuee a un autre evenement dans le même creneau horaire.")
+            print(f"Conflit detecte ! La salle {reservation.id_salle} est deja attribuee a un autre evenement dans le meme creneau horaire.")
             print("\n----------------------------------------------------------------Solution alternative----------------------------------------------------------------")
             print("Liste des salles disponible dans ce crenau :\n") #liste des salles Alternative
             avalaible_Salles=self.suggest_alternative_salles( reservation.id_salle,reservation.id_evenement)
             return False
 
-        salle_horaire = self.get_salle_horaire(reservation.id_salle) #Recuprer l'horaire de la salle a reserver
-        event_horaire = self.get_event_date_heure(reservation.id_evenement) #Recuperer L'horaire de l'evenement pour lequel on veut reserver
-        print("Event horaire---",event_horaire)
-        print("Salle Horeire --------",salle_horaire)
         #Verifie qu'il n'ya pas de conflict de salle dans le crenau choisi
-        if not self.is_salle_conflict(reservation.id_salle, reservation.id_evenement):
-            print(f"Conflit detecte ! La salle {reservation.id_salle} est deja attribuee a un autre evenement dans le même creneau horaire.")
+        elif self.is_salle_conflict(reservation.id_salle, reservation.id_evenement):
+            print(f"Conflit detecte ! La salle {reservation.id_salle} est deja attribuee a un autre evenement dans le meme creneau horaire.")
             print("\n----------------------------------------------------------------Solution alternative----------------------------------------------------------------")
             print("Liste des salles disponible dans ce crenau :\n")
             avalaible_Salles=self.suggest_alternative_salles( reservation.id_salle,reservation.id_evenement)
             return False
         
         
-        if not salle_horaire or not event_horaire: #Gestion d'erreur, si l'heure de la salle ou de l'evenement manque
+        elif not salle_horaire or not event_horaire: #Gestion d'erreur, si l'heure de la salle ou de l'evenement manque
             print("Impossible de verifier l'horaire, donnees manquantes.")
             return False
         
-        if  not self.check_time_conflict(event_horaire, salle_horaire): #Verifie s'il n'ya pas de conflit dans les differants horaire 
+        elif  self.check_time_conflict(event_horaire, salle_horaire): #Verifie s'il n'ya pas de conflit dans les differants horaire 
             print(f"Erreur: L'evenement ne correspond pas aux horaires de la salle {reservation.id_salle}.")
             print("\n----------------------------------------------------------------Solution alternative----------------------------------------------------------------")
             print("Liste des salles disponible dans ce crenau :\n")
             avalaible_Salles=self.suggest_alternative_salles( reservation.id_salle,reservation.id_evenement)            
             return False
         
+        elif  self.is_salle_already_reserved(reservation.id_salle, reservation.id_evenement):
+            print(f"\nConflit detecte ! La salle {reservation.id_salle} est deja reservee pour un autre evenement dans ce meme creneau et cette meme date.")
+            print("\n----------------------------------------------------------------Solution alternative----------------------------------------------------------------")
+            print("Liste des salles disponible dans ce crenau :\n")
+            avalaible_Salles=self.suggest_alternative_salles( reservation.id_salle,reservation.id_evenement)            
+            return False
 
         # Ajouter la reservation
         self.reservations.append(reservation)
@@ -127,7 +129,7 @@ class ReservationSalle:
                 reader = csv.reader(f)
                 next(reader, None)
                 for row in reader:
-                    if row and row[0] == id_event : #verifi que l'id corresond
+                    if row and row[0] == id_event : #verifie que l'id corresond
                         statut = row[5]
                         if statut =="Annuler": #verifie le champs du Statut
                             print("Impossible d'enregistrer cette reservation, cet evenement a ete annuler")
@@ -151,9 +153,9 @@ class ReservationSalle:
                     if row and row[3] == id_salle and row[0] != id_evenement:  # Verifie que ce n'est pas le meme evenement
                         date_heure_existing = self.get_salle_horaire(id_salle)
                         date_heure_new = self.get_event_date_heure(id_evenement)
-                        if date_heure_new and date_heure_existing and self.check_time_conflict(date_heure_new, date_heure_existing):
-                        
+                        if self.check_time_conflict(date_heure_new, date_heure_existing):
                             return True
+                        
         except FileNotFoundError:
             print(f"Le fichier {self.path_event_csv} n'existe pas !")
         return False
@@ -191,7 +193,7 @@ class ReservationSalle:
             start_event, end_event = map(lambda x: datetime.strptime(x, "%H:%M"), time_event.split('-'))
             start_salle, end_salle = map(lambda x: datetime.strptime(x, "%H:%M"), horaire_salle.split('-'))
 
-            return not (end_event <= start_salle or start_event >= end_salle)  # Conflit s'il y a un chevauchement
+            return start_event < start_salle  or end_event > end_salle  # Conflit s'il y a un chevauchement
         except ValueError as e:
             print(f"Erreur de format d'heure : {e}")
             return False
@@ -205,8 +207,59 @@ class ReservationSalle:
         if cap_max and nbre_max_event:
             return cap_max < nbre_max_event
     
+    def is_salle_already_reserved(self, id_salle: str, id_evenement: str) -> bool:
+        """Verifie si la salle est deja reservee pour un autre evenement au meme jour et aux memes heures"""
+        try:
+            # Recuperer la date et l'heure de l'evenement a reserver
+            event_horaire = self.get_event_date_heure(id_evenement)  
+            if not event_horaire:
+                print(f"Aucun horaire trouve pour l'evenement {id_evenement}.")
+                return False
+            try:
+                # Extraction de la date et de l'heure de l'evenement a reserver
+                date_event, time_event = event_horaire.split('|')
+                date_event = datetime.strptime(date_event, "%Y-%m-%d").date()
 
-  
+                start_time_event, end_time_event = time_event.split('-')
+
+                start_time_event = datetime.strptime(start_time_event, "%H:%M").time()
+                end_time_event = datetime.strptime(end_time_event, "%H:%M").time()
+            except ValueError as e:
+                print(f"Erreur de conversion de date dans la reservation {row}: {e}")
+                
+
+            with open(self.path_reservation_csv, "r") as f: #Ouverture du fichier de sauvegarde
+                reader = csv.reader(f)
+                next(reader, None)  # Ignorer l'entete
+
+                for row in reader:
+
+                    try:
+                        if row and row[1]==id_salle:  # Verifie que la ligne contient bien les donnees attendues
+                            event_res_horaire=self.get_event_date_heure(row[2])
+                            date_event_res, time_event_res = event_res_horaire.split('|')
+                            date_event_res = datetime.strptime(date_event_res, "%Y-%m-%d").date()
+
+                            # etape 3 : Separer l'intervalle d'heures
+                            start_time_event_res, end_time_event_res = time_event_res.split('-')
+
+                            # etape 4 : Convertir les heures en type `time`
+                            start_time_event_res = datetime.strptime(start_time_event_res, "%H:%M").time()
+                            end_time_event_res = datetime.strptime(end_time_event_res, "%H:%M").time()
+
+                            if date_event==date_event_res:
+                                if end_time_event_res <= start_time_event <= end_time_event_res or end_time_event_res <= end_time_event <= end_time_event_res:
+                                    return True  # Salle deja reservee
+                    except ValueError as e:
+                            print(f"Erreur de conversion de date dans la reservation {row}: {e}")
+                            continue  # Passer a la ligne suivante si erreur de format
+
+            return False  # Pas de conflit
+
+        except FileNotFoundError:
+            print(f"Le fichier {self.path_reservation_csv} n'existe pas !")
+            return False
+
 
     def suggest_alternative_salles(self, id_salle_conflictuelle: str, id_evenement: str):
         try:
@@ -228,15 +281,15 @@ class ReservationSalle:
                         salle_horaire = row[4]  # Format HH:MM-HH:MM
                         start_salle, end_salle = map(lambda x: datetime.strptime(x, "%H:%M").time(), salle_horaire.split('-'))
 
-                        # Verifier que la salle n'est pas la salle en conflit et qu'elle est disponible
-                        if id_salle != id_salle_conflictuelle and \
-                                self.check_time_conflict(event_horaire, salle_horaire) and \
-                                not self.is_salle_conflict(id_salle, id_evenement):
-                            alternative_salles.append((id_salle, salle_horaire))
+                        # Verifie que la salle n'est pas la salle en conflit et qu'elle est disponible
+                        if self.check_time_conflict(event_horaire, salle_horaire):continue
+                        if self.is_salle_already_reserved(id_salle, id_evenement) :continue
 
-            # Afficher les suggestions
+                        alternative_salles.append((id_salle, salle_horaire))
+
+            # Affiche les suggestions
             if alternative_salles:
-                print("Suggestions de salles alternatives :")
+                print("Suggestions de salles alternatives :\n")
                 for salle, horaire in alternative_salles:
                     print(f"salle {salle} disponible de {horaire}")
                 return True
