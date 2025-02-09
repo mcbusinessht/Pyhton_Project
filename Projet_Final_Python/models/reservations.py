@@ -251,7 +251,7 @@ class ReservationSalle:
 
             # Verifier si les salles restantes respectent leurs horaires
             for id_salle, horaire_salle in salles_disponibles.items():
-                if not self.check_time_conflict(date_heure_event, horaire_salle):
+                if self.check_time_conflict(date_heure_event, horaire_salle):
                     if not self.is_cap_max_salle_conflict(id_salle, id_event):
                         available_salles.append(id_salle)
                         
