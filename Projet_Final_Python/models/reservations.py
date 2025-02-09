@@ -81,7 +81,7 @@ class ReservationSalle:
             print(f"Conflit detecte ! La salle {reservation.id_salle} est deja attribuee a un autre evenement dans le même creneau horaire.")
             print("\n----------------------------------------------------------------Solution alternative----------------------------------------------------------------")
             print("Liste des salles disponible dans ce crenau :\n") #liste des salles Alternative
-            avalaible_Salles=self.get_available_salles(event_horaire,reservation.id_salle, reservation.id_evenement)
+            avalaible_Salles=self.suggest_alternative_salles( reservation.id_salle,reservation.id_evenement)
             return False
 
         salle_horaire = self.get_salle_horaire(reservation.id_salle) #Recuprer l'horaire de la salle a reserver
@@ -93,10 +93,7 @@ class ReservationSalle:
             print(f"Conflit detecte ! La salle {reservation.id_salle} est deja attribuee a un autre evenement dans le même creneau horaire.")
             print("\n----------------------------------------------------------------Solution alternative----------------------------------------------------------------")
             print("Liste des salles disponible dans ce crenau :\n")
-            avalaible_Salles=self.get_available_salles(event_horaire,reservation.id_salle, reservation.id_evenement)
-            if not avalaible_Salles: return False
-            for row in avalaible_Salles:
-                print(row)
+            avalaible_Salles=self.suggest_alternative_salles( reservation.id_salle,reservation.id_evenement)
             return False
         
         
@@ -108,10 +105,7 @@ class ReservationSalle:
             print(f"Erreur: L'evenement ne correspond pas aux horaires de la salle {reservation.id_salle}.")
             print("\n----------------------------------------------------------------Solution alternative----------------------------------------------------------------")
             print("Liste des salles disponible dans ce crenau :\n")
-            avalaible_Salles=self.get_available_salles(event_horaire,reservation.id_salle, reservation.id_evenement)
-            if not avalaible_Salles: return False
-            for row in avalaible_Salles:
-                print(row)
+            avalaible_Salles=self.suggest_alternative_salles( reservation.id_salle,reservation.id_evenement)            
             return False
         
 
@@ -212,58 +206,58 @@ class ReservationSalle:
             return cap_max < nbre_max_event
     
 
-
-    def get_available_salles(self, date_heure_event, id_salle,id_event):
-        available_salles = []
+    def get_available_salle(self, id_salle):
+        available_salle=[]
         try:
-            # Charger toutes les salles
-            salles_disponibles = {}
+            with open(self.path_salle_csv,'r')as f:
+                reader_s=csv.reader(f)
+                next(reader_s,None)
+                for row in reader_s:
+                    available_salle.append(row)
+            
+
+        except FileNotFoundError:
+            print("Fichier Non trouver")
+
+    def suggest_alternative_salles(self, id_salle_conflictuelle: str, id_evenement: str):
+        try:
+            event_horaire = self.get_event_date_heure(id_evenement)
+            if not event_horaire:
+                print(f"Aucun horaire trouve pour l'evenement {id_evenement}.")
+                return []
+
+            date_event, time_event = event_horaire.split('|')
+            start_event, end_event = map(lambda x: datetime.strptime(x, "%H:%M").time(), time_event.split('-'))
+
+            alternative_salles = []
             with open(self.path_salle_csv, "r") as f:
                 reader = csv.reader(f)
-                next(reader, None)  # Ignorer l'en-tête
+                next(reader, None)  # Ignorer l'entete
                 for row in reader:
                     if row:
-                        salles_disponibles[row[0]] = row[4]  # {id_salle: horaire_salle}
+                        id_salle = row[0]
+                        salle_horaire = row[4]  # Format HH:MM-HH:MM
+                        start_salle, end_salle = map(lambda x: datetime.strptime(x, "%H:%M").time(), salle_horaire.split('-'))
 
-            # Verifier les reservations existantes
-            with open(self.path_reservation_csv, "r") as f:
-                reader = csv.reader(f)
-                next(reader, None)
-                for row in reader:
-                    if row:
-                        id_salle_reservee = row[1]
-                        id_evenement_reserve = row[2]
-                        event_horaire = self.get_event_date_heure(id_evenement_reserve)
-                        salle_horaire=self.get_salle_horaire(id_salle)
+                        # Verifier que la salle n'est pas la salle en conflit et qu'elle est disponible
+                        if id_salle != id_salle_conflictuelle and \
+                                self.check_time_conflict(event_horaire, salle_horaire) and \
+                                not self.is_salle_conflict(id_salle, id_evenement):
+                            alternative_salles.append((id_salle, salle_horaire))
 
-                        if event_horaire and self.check_time_conflict(date_heure_event, salle_horaire):
-                            salles_disponibles.pop(id_salle_reservee, None)  # Supprimer la salle occupee
-
-            # Verifier les evenements qui ont dejà attribue une salle
-            with open(self.path_event_csv, "r") as f:
-                reader = csv.reader(f)
-                next(reader, None)
-                for row in reader:
-                    if row and row[3] in salles_disponibles:  # Verifier si la salle est toujours disponible
-                        event_horaire = row[2]
-                        if self.check_time_conflict(date_heure_event, event_horaire):
-                            salles_disponibles.pop(row[3], None)  # Supprimer la salle utilisee pour un autre evenement
-
-            # Verifier si les salles restantes respectent leurs horaires
-            for id_salle, horaire_salle in salles_disponibles.items():
-                if self.check_time_conflict(date_heure_event, horaire_salle):
-                    if not self.is_cap_max_salle_conflict(id_salle, id_event):
-                        available_salles.append(id_salle)
-                        
+            # Afficher les suggestions
+            if alternative_salles:
+                print("Suggestions de salles alternatives :")
+                for salle, horaire in alternative_salles:
+                    print(f"salle {salle} disponible de {horaire}")
+                return True
+            else:
+                print("\nAucune salle alternative disponible pour cet evenement.")
+                return False
 
         except FileNotFoundError as e:
             print(f"Fichier manquant : {e}")
-
-        if not available_salles: return available_salles 
-        compt=0
-        for row in available_salles:
-            self.gestion_salle.show_salle_id(row, compt)
-            compt=compt+1
+            return False
 
 
 
